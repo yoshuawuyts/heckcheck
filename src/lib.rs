@@ -67,12 +67,16 @@
 
 mod checker;
 mod shrink;
+mod shrinker;
 
 pub use arbitrary::{Arbitrary, Unstructured};
 pub use checker::HeckCheck;
-pub use shrink::{Shrink, ShrinkReport, Shrinker};
+pub use shrink::{Shrink, ShrinkReport};
+pub use shrinker::Shrinker;
 
 /// Check a target.
+///
+/// This is a shorthand for calling `HeckCheck::new` and `HeckCheck::check`.
 pub fn check<A, F>(f: F)
 where
     A: for<'b> Arbitrary<'b>,
@@ -82,9 +86,12 @@ where
     checker.check(f);
 }
 
-/// Replay a failing test from a seed.
+/// Replay a failing test from a base64 string.
 ///
-/// Pass a known seed and failing test case to this to repeat a failure.
+/// When a call to `check` fails, a base64-encoded string is printed
+/// representing the failing input data. You can pass this string together with
+/// the failing test code to `heckcheck::replay` to create a permanent
+/// reproduction of the error.
 pub fn replay<A, F>(bytes: &str, mut f: F)
 where
     A: for<'b> Arbitrary<'b>,
