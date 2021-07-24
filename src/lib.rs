@@ -1,5 +1,7 @@
 //! A heckin small test generator.
 //!
+//! See the documentation of [`HeckCheck`] to get started.
+//!
 //! # What is test generation?
 //!
 //! A test generator is a program which writes programs to test other programs.
@@ -23,71 +25,73 @@
 //! # Examples
 //!
 //! ```
-//! // tbi
+//!  use heckcheck::Arbitrary;
+//!
+//! /// A color value encoded as Red-Green-Blue
+//! #[derive(Clone, Debug, Arbitrary, PartialEq)]
+//! pub struct Rgb {
+//!     pub r: u8,
+//!     pub g: u8,
+//!     pub b: u8,
+//! }
+//!
+//! impl Rgb {
+//!     /// Convert from RGB to Hexadecimal.
+//!     pub fn to_hex(&self) -> String {
+//!         format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
+//!     }
+//!
+//!     /// Convert from Hexadecimal to RGB.
+//!     pub fn from_hex(s: String) -> Self {
+//!         let s = s.strip_prefix('#').unwrap();
+//!         Rgb {
+//!             r: u8::from_str_radix(&s[0..2], 16).unwrap(),
+//!             g: u8::from_str_radix(&s[2..4], 16).unwrap(),
+//!             b: u8::from_str_radix(&s[4..6], 16).unwrap(),
+//!         }
+//!     }
+//! }
+//!
+//! // Validate values can be converted from RGB to Hex and back.
+//! heckcheck::check(|rgb: Rgb| {
+//!     let hex = rgb.to_hex();
+//!     let res = Rgb::from_hex(hex);
+//!     assert_eq!(rgb, res);
+//!     Ok(())
+//! });
 //! ```
 
 #![forbid(unsafe_code, future_incompatible, rust_2018_idioms)]
 #![deny(missing_debug_implementations, nonstandard_style)]
-#![warn(missing_docs, missing_doc_code_examples, unreachable_pub)]
+#![warn(missing_docs, unreachable_pub)]
 
-const MAX_COUNT: u64 = 100;
+mod checker;
+mod shrink;
 
 pub use arbitrary::{Arbitrary, Unstructured};
-use rand::prelude::*;
+pub use checker::HeckCheck;
+pub use shrink::{Shrink, ShrinkReport, Shrinker};
 
-/// The main test checker.
-#[derive(Debug, Default)]
-pub struct HeckCheck {
-    bytes: Vec<u8>,
-    max_count: u64,
+/// Check a target.
+pub fn check<A, F>(f: F)
+where
+    A: for<'b> Arbitrary<'b>,
+    F: FnMut(A) -> arbitrary::Result<()>,
+{
+    let mut checker = HeckCheck::new();
+    checker.check(f);
 }
 
-impl HeckCheck {
-    /// Create a new instance.
-    pub fn new() -> Self {
-        Self {
-            bytes: vec![0u8; 1024],
-            max_count: MAX_COUNT,
-        }
-    }
-
-    /// Check the target.
-    pub fn check<'a, A, F>(&'a mut self, mut f: F)
-    where
-        A: for<'b> Arbitrary<'b>,
-        F: FnMut(A) -> arbitrary::Result<()>,
-    {
-        let mut rng = rand::thread_rng();
-        if self.bytes.len() < A::size_hint(0).0 {
-            self.grow_vec(Some(A::size_hint(0).0));
-        }
-
-        let mut successes = 0usize;
-
-        for n in 0..self.max_count {
-            dbg!(n);
-            rng.fill_bytes(&mut self.bytes);
-            let mut u = Unstructured::new(&self.bytes);
-            let instance = A::arbitrary(&mut u).unwrap();
-            match f(instance) {
-                Ok(_) => successes += 1,
-                Err(err) => match err {
-                    arbitrary::Error::NotEnoughData => self.grow_vec(None),
-                    err => panic!("{}", err),
-                },
-            }
-        }
-        println!("ran {} times successfully", successes);
-    }
-
-    fn grow_vec(&mut self, target: Option<usize>) {
-        match target {
-            Some(target) => {
-                if target.checked_sub(self.bytes.len()).is_some() {
-                    self.bytes.resize_with(target, || 0);
-                }
-            }
-            None => self.bytes.resize_with(self.bytes.len() * 2, || 0),
-        };
-    }
+/// Replay a failing test from a seed.
+///
+/// Pass a known seed and failing test case to this to repeat a failure.
+pub fn replay<A, F>(bytes: &str, mut f: F)
+where
+    A: for<'b> Arbitrary<'b>,
+    F: FnMut(A) -> arbitrary::Result<()>,
+{
+    let bytes = base64::decode(bytes).unwrap();
+    let mut u = Unstructured::new(&bytes);
+    let instance = A::arbitrary(&mut u).unwrap();
+    f(instance).unwrap();
 }
