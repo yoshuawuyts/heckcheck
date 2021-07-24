@@ -30,15 +30,16 @@
 #![deny(missing_debug_implementations, nonstandard_style)]
 #![warn(missing_docs, missing_doc_code_examples, unreachable_pub)]
 
-pub use arbitrary::Arbitrary;
+const MAX_COUNT: u64 = 100;
 
-use arbitrary::Unstructured;
-use rand::RngCore;
+pub use arbitrary::{Arbitrary, Unstructured};
+use rand::prelude::*;
 
 /// The main test checker.
 #[derive(Debug, Default)]
 pub struct HeckCheck {
     bytes: Vec<u8>,
+    max_count: u64,
 }
 
 impl HeckCheck {
@@ -46,22 +47,47 @@ impl HeckCheck {
     pub fn new() -> Self {
         Self {
             bytes: vec![0u8; 1024],
+            max_count: MAX_COUNT,
         }
     }
 
     /// Check the target.
     pub fn check<'a, A, F>(&'a mut self, mut f: F)
     where
-        A: Arbitrary<'a>,
-        F: for<'r> FnMut(&'r mut A) -> arbitrary::Result<()>,
+        A: for<'b> Arbitrary<'b>,
+        F: FnMut(A) -> arbitrary::Result<()>,
     {
         let mut rng = rand::thread_rng();
-        rng.fill_bytes(&mut self.bytes);
-        if self.bytes.len() < dbg!(A::size_hint(0).0) {
-            todo!("not enough bytes"); // make this request more data
+        if self.bytes.len() < A::size_hint(0).0 {
+            self.grow_vec(Some(A::size_hint(0).0));
         }
-        let mut u = Unstructured::new(&self.bytes);
-        let mut instance = A::arbitrary(&mut u).unwrap(); // todo: handle "not enough data".
-        f(&mut instance).unwrap();
+
+        let mut successes = 0usize;
+
+        for n in 0..self.max_count {
+            dbg!(n);
+            rng.fill_bytes(&mut self.bytes);
+            let mut u = Unstructured::new(&self.bytes);
+            let instance = A::arbitrary(&mut u).unwrap();
+            match f(instance) {
+                Ok(_) => successes += 1,
+                Err(err) => match err {
+                    arbitrary::Error::NotEnoughData => self.grow_vec(None),
+                    err => panic!("{}", err),
+                },
+            }
+        }
+        println!("ran {} times successfully", successes);
+    }
+
+    fn grow_vec(&mut self, target: Option<usize>) {
+        match target {
+            Some(target) => {
+                if target.checked_sub(self.bytes.len()).is_some() {
+                    self.bytes.resize_with(target, || 0);
+                }
+            }
+            None => self.bytes.resize_with(self.bytes.len() * 2, || 0),
+        };
     }
 }
