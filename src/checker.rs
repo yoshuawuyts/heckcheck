@@ -45,10 +45,20 @@ impl HeckCheck {
     }
 
     /// Check the target.
-    pub fn check<'a, A, F>(&'a mut self, mut f: F)
+    pub fn check<A, F>(&mut self, f: F)
     where
         A: for<'b> Arbitrary<'b>,
         F: FnMut(A) -> arbitrary::Result<()>,
+    {
+        self.check_with_shrinker::<_, _, Shrinker>(f)
+    }
+
+    /// Check the target with the specified shrinker.
+    pub fn check_with_shrinker<A, F, S>(&mut self, mut f: F)
+    where
+        A: for<'b> Arbitrary<'b>,
+        F: FnMut(A) -> arbitrary::Result<()>,
+        S: Shrink,
     {
         // Make sure we have enough bytes in our buffer before we start testing.
         if self.bytes.len() < A::size_hint(0).0 {
@@ -82,7 +92,7 @@ impl HeckCheck {
             // If the test panicked we start reducing the test case.
             if res.is_err() {
                 let upper = self.bytes.len() - u_len;
-                let mut shrinker = Shrinker::shrink(&mut self.bytes[0..upper]);
+                let mut shrinker = S::shrink(self.bytes[0..upper].to_owned());
                 loop {
                     let mut u = Unstructured::new(shrinker.next());
                     let instance = A::arbitrary(&mut u).unwrap();

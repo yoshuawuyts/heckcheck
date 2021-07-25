@@ -34,7 +34,7 @@ fn smoke() {
 #[test]
 #[should_panic]
 fn shrinker() {
-    #[derive(Clone, Debug, Arbitrary, PartialEq)]
+    #[derive(Arbitrary, Debug, PartialEq)]
     pub struct Rgb {
         pub r: u8,
         pub g: u8,

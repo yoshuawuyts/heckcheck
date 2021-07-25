@@ -1,7 +1,7 @@
 /// Test case shrinking.
-pub trait Shrink<'a> {
+pub trait Shrink {
     /// Start shrinking the provided data.
-    fn shrink(source: &'a mut [u8]) -> Self;
+    fn shrink(source: Vec<u8>) -> Self;
 
     /// Get the next test case.
     fn next(&mut self) -> &[u8];
