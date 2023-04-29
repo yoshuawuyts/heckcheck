@@ -1,4 +1,4 @@
-use heckcheck::Arbitrary;
+use heckcheck::prelude::*;
 
 #[test]
 fn smoke() {
@@ -33,7 +33,7 @@ fn smoke() {
 
 #[test]
 #[should_panic]
-fn shrinker() {
+fn panics_on_bug() {
     #[derive(Arbitrary, Debug, PartialEq)]
     pub struct Rgb {
         pub r: u8,

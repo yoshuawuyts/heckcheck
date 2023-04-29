@@ -4,13 +4,13 @@ version = "1.0.2"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/yoshuawuyts/heckcheck"
 documentation = "https://docs.rs/heckcheck"
-description = "A heckin small test generator"
+description = "A heckin small test case generator"
 readme = "README.md"
 edition = "2018"
 keywords = []
 categories = []
 authors = [
-    "Yoshua Wuyts <yoshuawuyts@gmail.com>"
+    "Yosh Wuyts <rust@yosh.is>"
 ]
 
 [features]

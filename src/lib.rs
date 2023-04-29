@@ -1,6 +1,6 @@
-//! A heckin small test generator.
+//! A heckin small test case generator.
 //!
-//! # What is test generation?
+//! # What is test case generation?
 //!
 //! A test generator is a program which writes programs to test other programs.
 //! The idea is that we can find more bugs if we test more paths in a program,
@@ -41,7 +41,7 @@
 //! # Examples
 //!
 //! ```
-//!  use heckcheck::Arbitrary;
+//! use heckcheck::prelude::*;
 //!
 //! /// A color value encoded as Red-Green-Blue
 //! #[derive(Clone, Debug, Arbitrary, PartialEq)]
@@ -81,14 +81,22 @@
 #![deny(missing_debug_implementations, nonstandard_style)]
 #![warn(missing_docs, unreachable_pub)]
 
+pub use arbitrary;
+
+use arbitrary::Arbitrary;
+
 mod checker;
 mod shrink;
 mod shrinker;
 
-pub use arbitrary::{Arbitrary, Unstructured};
 pub use checker::HeckCheck;
 pub use shrink::{Shrink, ShrinkReport};
 pub use shrinker::Shrinker;
+
+/// The `heckcheck` prelude
+pub mod prelude {
+    pub use arbitrary::Arbitrary;
+}
 
 /// Check a target.
 ///
@@ -114,7 +122,7 @@ where
     F: FnMut(A) -> arbitrary::Result<()>,
 {
     let bytes = base64::decode(bytes).unwrap();
-    let mut u = Unstructured::new(&bytes);
+    let mut u = arbitrary::Unstructured::new(&bytes);
     let instance = A::arbitrary(&mut u).unwrap();
     f(instance).unwrap();
 }

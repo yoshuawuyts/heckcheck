@@ -1,7 +1,7 @@
 <h1 align="center">heckcheck</h1>
 <div align="center">
   <strong>
-    A heckin small test generator
+    A heckin small test case generator
   </strong>
 </div>
 

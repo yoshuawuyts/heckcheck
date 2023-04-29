@@ -123,4 +123,9 @@ impl HeckCheck {
             None => self.bytes.resize_with(self.bytes.len() * 2, || 0),
         };
     }
+
+    /// Access the value of `seed`.
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
 }
