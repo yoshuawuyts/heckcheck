@@ -114,7 +114,7 @@ mod shrinker;
 
 pub use checker::HeckCheck;
 pub use shrink::{Shrink, ShrinkReport};
-pub use shrinker::{Shrinker};
+pub use shrinker::Shrinker;
 
 /// The `heckcheck` prelude
 pub mod prelude {
@@ -144,7 +144,9 @@ where
     A: for<'b> Arbitrary<'b>,
     F: FnMut(A) -> arbitrary::Result<()>,
 {
-    let bytes = base64::engine::general_purpose::STANDARD.decode(bytes).unwrap();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(bytes)
+        .unwrap();
     let mut u = arbitrary::Unstructured::new(&bytes);
     let instance = A::arbitrary(&mut u).unwrap();
     f(instance).unwrap();

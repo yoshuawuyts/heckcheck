@@ -1,5 +1,5 @@
 use arbitrary::{Arbitrary, Unstructured};
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use std::panic::{self, AssertUnwindSafe};
