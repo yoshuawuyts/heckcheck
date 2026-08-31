@@ -88,26 +88,33 @@ impl HeckCheck {
                 }
             }));
 
+            // The bytes `A::arbitrary` left unread; used below to find where
+            // the data which produced `instance` ends.
             let u_len = u.len();
+
+            // The closure asked for more data than we had; grow for next pass.
             if more_data {
                 self.grow_vec(None);
             }
 
-            // Exit if we didn't panic
+            // Keep going if we didn't panic
             if res.is_ok() {
-                return;
+                continue;
             }
 
             // Start reducing the test case.
             let upper = self.bytes.len() - u_len;
             let mut shrinker = S::shrink(self.bytes[0..upper].to_owned());
             loop {
+                // Create a new input and call the closure again.
                 let mut u = Unstructured::new(shrinker.next());
                 let instance = A::arbitrary(&mut u).unwrap();
-
                 let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
                     f(instance).unwrap();
                 }));
+
+                // Report the outcome to the shrinker, and print the
+                // final report once it's done shrinking.
                 if let Some(case) = shrinker.report(res.into()) {
                     let sequence = STANDARD.encode(case);
 
