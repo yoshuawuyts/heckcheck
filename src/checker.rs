@@ -12,6 +12,33 @@ const MAX_PASSES: u64 = 100;
 /// The amount of data we initially allocate.
 const INITIAL_VEC_LEN: usize = 1024;
 
+type PanicHook = Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>;
+
+/// Silences the panic hook, restoring the previous one on drop - including
+/// while unwinding.
+struct HookGuard(Option<PanicHook>);
+
+impl HookGuard {
+    fn silence() -> Self {
+        let hook = panic::take_hook();
+        panic::set_hook(Box::new(|_| {}));
+        Self(Some(hook))
+    }
+
+    /// Restore the hook early, so that a subsequent panic is actually printed.
+    fn restore(&mut self) {
+        if let Some(hook) = self.0.take() {
+            panic::set_hook(hook);
+        }
+    }
+}
+
+impl Drop for HookGuard {
+    fn drop(&mut self) {
+        self.restore();
+    }
+}
+
 /// The main test checker.
 #[derive(Debug)]
 pub struct HeckCheck {
@@ -66,8 +93,7 @@ impl HeckCheck {
             self.grow_vec(Some(A::size_hint(0).0));
         }
 
-        let hook = panic::take_hook();
-        panic::set_hook(Box::new(|_| {}));
+        let mut guard = HookGuard::silence();
 
         for _ in 0..self.max_count {
             self.rng.fill_bytes(&mut self.bytes);
@@ -106,8 +132,8 @@ impl HeckCheck {
                     f(instance).unwrap();
                 }));
                 if let Some(case) = shrinker.report(res.into()) {
-                    panic::set_hook(hook);
                     let sequence = STANDARD.encode(case);
+                    guard.restore();
                     match sequence.len() {
                             0 => panic!("The failing base64 sequence is: ``. Pass an empty string to `heckcheck::replay` to create a permanent reproduction."),
                             _ => panic!("The failing base64 sequence is: `{}`. Pass this to `heckcheck::replay` to create a permanent reproduction.", sequence),
