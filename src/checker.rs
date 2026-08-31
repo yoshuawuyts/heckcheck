@@ -2,13 +2,18 @@ use arbitrary::{Arbitrary, Unstructured};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use rand::prelude::*;
 use rand::rngs::StdRng;
-use std::panic::{self, AssertUnwindSafe};
+use std::any::Any;
+use std::panic::{self, catch_unwind, AssertUnwindSafe};
 
 use crate::utils::DropGuard;
-use crate::{Shrink, Shrinker};
+use crate::{Shrink, ShrinkReport, Shrinker};
 
 /// The base number of iterations performed to find an error using `heckcheck`.
 const MAX_PASSES: u64 = 100;
+
+/// A backstop on the shrink loop, so a third-party `Shrink` implementation
+/// which never terminates can't hang the test run.
+const MAX_SHRINK_PASSES: u64 = 100_000;
 
 /// The amount of data we initially allocate.
 const INITIAL_VEC_LEN: usize = 1024;
@@ -82,7 +87,7 @@ impl HeckCheck {
 
             // Call the closure. Handle the return type from `Arbitrary`, and
             // handle possible panics from the closure.
-            let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            let res = catch_unwind(AssertUnwindSafe(|| {
                 if let Err(arbitrary::Error::NotEnoughData) = f(instance) {
                     more_data = true;
                 }
@@ -105,27 +110,44 @@ impl HeckCheck {
             // Start reducing the test case.
             let upper = self.bytes.len() - u_len;
             let mut shrinker = S::shrink(self.bytes[0..upper].to_owned());
-            loop {
+            let mut case = None;
+            for _ in 0..MAX_SHRINK_PASSES {
                 // Create a new input and call the closure again.
-                let mut u = Unstructured::new(shrinker.next());
-                let instance = A::arbitrary(&mut u).unwrap();
-                let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                    f(instance).unwrap();
-                }));
+                let report = match A::arbitrary(&mut Unstructured::new(shrinker.next())) {
+                    Ok(instance) => invoke_closure(&mut f, instance).into(),
+                    // Too little data left to construct an instance at all.
+                    Err(_) => ShrinkReport::Pass,
+                };
 
-                // Report the outcome to the shrinker, and print the
-                // final report once it's done shrinking.
-                if let Some(case) = shrinker.report(res.into()) {
-                    let sequence = STANDARD.encode(case);
-
-                    // Restore the previously overwritten panic hook
-                    // so we can unwind with an error from here.
-                    panic::set_hook(DropGuard::dismiss(guard));
-                    match sequence.len() {
-                            0 => panic!("The failing base64 sequence is: ``. Pass an empty string to `heckcheck::replay` to create a permanent reproduction."),
-                            _ => panic!("The failing base64 sequence is: `{}`. Pass this to `heckcheck::replay` to create a permanent reproduction.", sequence),
-                        }
+                // Report the outcome to the shrinker, and stop once it's
+                // done shrinking.
+                if let Some(shrunk) = shrinker.report(report) {
+                    case = Some(shrunk.to_owned());
+                    break;
                 }
+            }
+
+            // A shrunk case is only useful if it still fails; if it doesn't we
+            // fall back to the full buffer, which is known to reproduce.
+            let reproduces = case.as_deref().is_some_and(|case| {
+                let mut u = Unstructured::new(case);
+                match A::arbitrary(&mut u) {
+                    Ok(instance) => invoke_closure(f, instance).is_err(),
+                    Err(_) => false,
+                }
+            });
+            let case = match reproduces {
+                true => case.unwrap(),
+                false => self.bytes.clone(),
+            };
+            let sequence = STANDARD.encode(case);
+
+            // Restore the previously overwritten panic hook
+            // so we can unwind with an error from here.
+            panic::set_hook(DropGuard::dismiss(guard));
+            match sequence.len() {
+                0 => panic!("The failing base64 sequence is: ``. Pass an empty string to `heckcheck::replay` to create a permanent reproduction."),
+                _ => panic!("The failing base64 sequence is: `{}`. Pass this to `heckcheck::replay` to create a permanent reproduction.", sequence),
             }
         }
     }
@@ -145,4 +167,13 @@ impl HeckCheck {
     pub fn seed(&self) -> u64 {
         self.seed
     }
+}
+
+/// Call the closure, but catching any panics and converting them to errors
+fn invoke_closure<A, F>(mut f: F, instance: A) -> Result<(), Box<dyn Any + Send + 'static>>
+where
+    A: for<'b> Arbitrary<'b>,
+    F: FnMut(A) -> arbitrary::Result<()>,
+{
+    catch_unwind(AssertUnwindSafe(|| f(instance).unwrap()))
 }

@@ -16,16 +16,21 @@ impl Shrink for Shrinker {
     }
 
     fn next(&mut self) -> &[u8] {
-        &self.source[..self.offset_start]
+        &self.source[..self.offset_start.min(self.source.len())]
     }
 
     fn report(&mut self, report: ShrinkReport) -> Option<&[u8]> {
         match report {
             ShrinkReport::Pass => {
                 self.offset_start += 1;
-                None
+                // No prefix reproduced the failure; give up and report the
+                // original case rather than slicing past the end of `source`.
+                match self.offset_start > self.source.len() {
+                    true => Some(&self.source),
+                    false => None,
+                }
             }
-            ShrinkReport::Fail => Some(&self.source[..self.offset_start]),
+            ShrinkReport::Fail => Some(&self.source[..self.offset_start.min(self.source.len())]),
         }
     }
 }
