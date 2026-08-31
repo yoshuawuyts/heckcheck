@@ -89,8 +89,9 @@ heckcheck::check(|rgb: Rgb| {
 ```
 
 ## Safety
-This crate uses ``#![deny(unsafe_code)]`` to ensure everything is implemented in
-100% Safe Rust.
+This crate uses ``#![forbid(unsafe_code)]`` to ensure everything is implemented
+in 100% Safe Rust, with the sole exception being an unsafe stdlib API we've
+temporarily copied in.
 
 ## Contributing
 Want to join us? Check out our ["Contributing" guide][contributing] and take a
