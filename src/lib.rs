@@ -106,6 +106,7 @@
 pub use arbitrary;
 
 use arbitrary::Arbitrary;
+use base64::Engine as _;
 
 mod checker;
 mod shrink;
@@ -143,7 +144,9 @@ where
     A: for<'b> Arbitrary<'b>,
     F: FnMut(A) -> arbitrary::Result<()>,
 {
-    let bytes = base64::decode(bytes).unwrap();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(bytes)
+        .unwrap();
     let mut u = arbitrary::Unstructured::new(&bytes);
     let instance = A::arbitrary(&mut u).unwrap();
     f(instance).unwrap();

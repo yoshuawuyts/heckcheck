@@ -1,4 +1,5 @@
 use arbitrary::{Arbitrary, Unstructured};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use std::panic::{self, AssertUnwindSafe};
@@ -102,7 +103,7 @@ impl HeckCheck {
                     }));
                     if let Some(case) = shrinker.report(res.into()) {
                         panic::set_hook(hook);
-                        let sequence = base64::encode(case);
+                        let sequence = STANDARD.encode(case);
                         match sequence.len() {
                             0 => panic!("The failing base64 sequence is: ``. Pass an empty string to `heckcheck::replay` to create a permanent reproduction."),
                             _ => panic!("The failing base64 sequence is: `{}`. Pass this to `heckcheck::replay` to create a permanent reproduction.", sequence),
