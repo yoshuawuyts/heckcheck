@@ -99,8 +99,7 @@
 //! solved a critical bug that almost made us give up.
 //!
 
-#![forbid(unsafe_code, future_incompatible, rust_2018_idioms)]
-#![deny(missing_debug_implementations, nonstandard_style)]
+#![deny(missing_debug_implementations, nonstandard_style, unsafe_code)]
 #![warn(missing_docs, unreachable_pub)]
 
 pub use arbitrary;
@@ -111,6 +110,7 @@ use base64::Engine as _;
 mod checker;
 mod shrink;
 mod shrinker;
+mod utils;
 
 pub use checker::HeckCheck;
 pub use shrink::{Shrink, ShrinkReport};
