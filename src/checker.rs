@@ -4,6 +4,7 @@ use rand::prelude::*;
 use rand::rngs::StdRng;
 use std::panic::{self, AssertUnwindSafe};
 
+use crate::utils::DropGuard;
 use crate::{Shrink, Shrinker};
 
 /// The base number of iterations performed to find an error using `heckcheck`.
@@ -11,33 +12,6 @@ const MAX_PASSES: u64 = 100;
 
 /// The amount of data we initially allocate.
 const INITIAL_VEC_LEN: usize = 1024;
-
-type PanicHook = Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>;
-
-/// Silences the panic hook, restoring the previous one on drop - including
-/// while unwinding.
-struct HookGuard(Option<PanicHook>);
-
-impl HookGuard {
-    fn silence() -> Self {
-        let hook = panic::take_hook();
-        panic::set_hook(Box::new(|_| {}));
-        Self(Some(hook))
-    }
-
-    /// Restore the hook early, so that a subsequent panic is actually printed.
-    fn restore(&mut self) {
-        if let Some(hook) = self.0.take() {
-            panic::set_hook(hook);
-        }
-    }
-}
-
-impl Drop for HookGuard {
-    fn drop(&mut self) {
-        self.restore();
-    }
-}
 
 /// The main test checker.
 #[derive(Debug)]
@@ -93,7 +67,10 @@ impl HeckCheck {
             self.grow_vec(Some(A::size_hint(0).0));
         }
 
-        let mut guard = HookGuard::silence();
+        // Silence panics just for the duration of the run. We can call
+        // `DropGuard.dismiss` to restore the original panic handler.
+        let guard = DropGuard::new(panic::take_hook(), panic::set_hook);
+        panic::set_hook(Box::new(|_| {}));
 
         for _ in 0..self.max_count {
             self.rng.fill_bytes(&mut self.bytes);
@@ -133,7 +110,10 @@ impl HeckCheck {
                 }));
                 if let Some(case) = shrinker.report(res.into()) {
                     let sequence = STANDARD.encode(case);
-                    guard.restore();
+
+                    // Restore the previously overwritten panic hook
+                    // so we can unwind with an error from here.
+                    panic::set_hook(DropGuard::dismiss(guard));
                     match sequence.len() {
                             0 => panic!("The failing base64 sequence is: ``. Pass an empty string to `heckcheck::replay` to create a permanent reproduction."),
                             _ => panic!("The failing base64 sequence is: `{}`. Pass this to `heckcheck::replay` to create a permanent reproduction.", sequence),
