@@ -90,25 +90,28 @@ impl HeckCheck {
                 self.grow_vec(None);
             }
 
-            // If the test panicked we start reducing the test case.
-            if res.is_err() {
-                let upper = self.bytes.len() - u_len;
-                let mut shrinker = S::shrink(self.bytes[0..upper].to_owned());
-                loop {
-                    let mut u = Unstructured::new(shrinker.next());
-                    let instance = A::arbitrary(&mut u).unwrap();
+            // Exit if we didn't panic
+            if res.is_ok() {
+                return;
+            }
 
-                    let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                        f(instance).unwrap();
-                    }));
-                    if let Some(case) = shrinker.report(res.into()) {
-                        panic::set_hook(hook);
-                        let sequence = STANDARD.encode(case);
-                        match sequence.len() {
+            // Start reducing the test case.
+            let upper = self.bytes.len() - u_len;
+            let mut shrinker = S::shrink(self.bytes[0..upper].to_owned());
+            loop {
+                let mut u = Unstructured::new(shrinker.next());
+                let instance = A::arbitrary(&mut u).unwrap();
+
+                let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                    f(instance).unwrap();
+                }));
+                if let Some(case) = shrinker.report(res.into()) {
+                    panic::set_hook(hook);
+                    let sequence = STANDARD.encode(case);
+                    match sequence.len() {
                             0 => panic!("The failing base64 sequence is: ``. Pass an empty string to `heckcheck::replay` to create a permanent reproduction."),
                             _ => panic!("The failing base64 sequence is: `{}`. Pass this to `heckcheck::replay` to create a permanent reproduction.", sequence),
                         }
-                    }
                 }
             }
         }
